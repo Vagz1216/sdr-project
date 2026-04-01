@@ -24,6 +24,11 @@ dependencies = [
     "uvicorn>=0.24.0",
 ]
 
+[project.scripts]
+run-email-monitor = "run_email_monitor:main"
+setup-webhook = "setup_webhook:main"
+test-email-monitor = "test_email_monitor:main"
+
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
 

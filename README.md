@@ -15,10 +15,15 @@ project-root/
 ├── packages/
 │   ├── agents/               # All agent workflows
 │   ├── db/                   # DB schema + queries
-│   ├── email/                # Email handling (server + utilities)
+│   ├── email/                # Email handling (outbound send helpers)
 │   ├── integrations/         # External services (Google Meet, etc.)
 │   ├── schema/               # Pydantic declarations
-│   └── shared/               # Types, constants, helpers
+│   ├── shared/               # Types, constants, helpers
+│
+├── config/                   # App settings (pydantic-settings) for email monitor
+├── email_monitor/            # Inbound webhook + intent + reply (merged from upstream PR #1)
+├── schema/                   # Pydantic models for monitor + tools
+├── tools/                    # Agent tools (send / reply) for monitor
 │
 ├── scripts/                  # Dev scripts (seeding, cron triggers, etc.)
 ├── .env
@@ -33,7 +38,7 @@ project-root/
 3. First DB connection applies `db/schema.sql` (and `db/seed.sql` if campaigns are empty). Optional extra leads: `uv run python scripts/seed_contacts.py`
 4. Run one outreach batch (generate → guardrails → AgentMail → DB touch update): `uv run python scripts/run_outreach.py --limit 5`
 5. Optional API trigger: from repo root, `uv run uvicorn apps.api.main:app --reload` then `POST /outreach/run?limit=5`
-6. Worker app (`apps/worker`) remains for background jobs as the platform grows.
+6. **Inbound monitor** (AgentMail webhook + intent): `uv run run-email-monitor` (see `email_monitor/server.py`; configure webhook with `uv run setup-webhook` if supported).
 
 ### Outbound slice (v2 spec §4) — review checklist
 

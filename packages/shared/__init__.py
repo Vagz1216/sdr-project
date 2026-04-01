@@ -1,3 +1,1 @@
-"""Shared package - types, constants, helpers"""
-
-# TODO: Implement shared utilities and constants
+"""Shared settings and helpers for ``packages`` (outreach)."""
