@@ -35,3 +35,18 @@ class ResponseEvaluation(BaseModel):
     """Structured response evaluation result."""
     approved: bool = Field(description="Whether the response is approved for sending")
     reason: str = Field(description="Brief explanation of the approval or rejection decision")
+
+
+class MeetingDetails(BaseModel):
+    """Structured meeting details for calendar event creation."""
+    subject: str = Field(description="Professional meeting subject line")
+    start_time: str = Field(description="Meeting start time in YYYY-MM-DD HH:MM format")
+    duration_minutes: int = Field(description="Duration of the meeting in minutes")
+    description: str = Field(description="Brief meeting description with context from email conversation")
+
+
+class EmailResponse(BaseModel):
+    """Structured email response output."""
+    response_text: str = Field(description="The generated email response text")
+    action: str = Field(description="Action taken: generated, skipped, or error")
+    reason: str | None = Field(None, description="Reason for skipping or error if applicable")

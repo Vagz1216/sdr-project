@@ -4,6 +4,7 @@ import logging
 from typing import Dict, Any
 from agentmail import AgentMail
 
+from config.logging import setup_logging
 from config import settings
 from schema import EmailActionResult
 from agents import Trace, gen_trace_id
@@ -11,6 +12,10 @@ from .intent_extractor import IntentExtractorAgent
 from .email_response import EmailResponseAgent
 from .response_evaluator import ResponseEvaluator
 from .email_sender import EmailSenderAgent
+
+# Setup logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -79,14 +84,14 @@ class EmailMonitorSystem:
             return f"Unable to fetch conversation history: {str(e)}"
     
     async def process_incoming_email(self, email_data: Dict[str, Any]) -> EmailActionResult:
-        """Simple linear pipeline: Intent → Generate → Evaluate → Send if approved."""
+        """Complete email processing pipeline with retry logic and meeting scheduling."""
         # Create a single trace for the entire email processing pipeline
         trace_id = gen_trace_id()
         sender_email = email_data.get('from_', [''])[0]
         subject = email_data.get('subject', '')
         
         with Trace(
-            name="email_processing_pipeline",
+            name="email_reply_processing_pipeline",
             trace_id=trace_id,
             inputs={"sender": sender_email, "subject": subject}
         ):
@@ -103,51 +108,69 @@ class EmailMonitorSystem:
                 # Step 2: Get conversation context
                 conversation_history = await self.fetch_conversation_history(thread_id) if thread_id else ""
                 
-                # Step 3: Generate response
-                response_result = await self.response_agent.generate_response(
-                    email_data, intent, conversation_history
-                )
+                # Step 3: Generate response with retry logic
+                max_retries = 2
+                retry_count = 0
                 
-                # Handle skipped responses
-                if response_result["action"] == "skipped":
-                    result = EmailActionResult(
-                        action_taken="skipped",
-                        success=True,
-                        error=response_result.get("reason")
+                while retry_count <= max_retries:
+                    # Generate response
+                    response_result = await self.response_agent.generate_response(
+                        email_data, intent, conversation_history
                     )
-                    logger.info(f"Email processing result: {result.action_taken}")
-                    return result
-                
-                if response_result["action"] != "generated":
-                    result = EmailActionResult(
-                        action_taken="error",
-                        success=False,
-                        error=response_result.get("reason", "Failed to generate response")
+                    
+                    # Handle skipped responses
+                    if response_result["action"] == "skipped":
+                        return EmailActionResult(
+                            action_taken="skipped",
+                            success=True,
+                            error=response_result.get("reason")
+                        )
+                    
+                    if response_result["action"] != "generated":
+                        return EmailActionResult(
+                            action_taken="error",
+                            success=False,
+                            error=response_result.get("reason", "Failed to generate response")
+                        )
+                    
+                    # Step 4: Evaluate response
+                    response_text = response_result["response_text"]
+                    evaluation_context = {**email_data, "intent": intent.intent}
+                    
+                    evaluation = await self.response_evaluator.evaluate_response(
+                        response_text, evaluation_context
                     )
-                    logger.error(f"Email processing error: {result.error}")
-                    return result
+                    
+                    # If approved, proceed to sending
+                    if evaluation.approved:
+                        logger.info(f"Response approved on attempt {retry_count + 1}")
+                        break
+                    
+                    # If not approved and we have retries left
+                    retry_count += 1
+                    if retry_count <= max_retries:
+                        logger.warning(f"Response rejected (attempt {retry_count}): {evaluation.reason}. Retrying...")
+                        # Add feedback to context for next attempt
+                        conversation_history += f"\n\nPrevious response was rejected: {evaluation.reason}. Please improve the response."
+                    else:
+                        logger.error(f"Response rejected after {max_retries + 1} attempts: {evaluation.reason}")
+                        return EmailActionResult(
+                            action_taken="rejected",
+                            success=False,
+                            error=f"Evaluator rejected after {max_retries + 1} attempts: {evaluation.reason}"
+                        )
                 
-                # Step 4: Evaluate response
-                response_text = response_result["response_text"]
-                evaluation_context = {**email_data, "intent": intent.intent}
+                # Step 4: Send email with context for potential meeting creation
+                email_context = {
+                    **email_data,
+                    "intent": intent.model_dump(),
+                    "conversation_history": conversation_history
+                }
                 
-                evaluation = await self.response_evaluator.evaluate_response(
-                    response_text, evaluation_context
-                )
+                result = await self.email_sender.execute_action(response_text, email_context)
                 
-                # Step 5: Send if approved, otherwise flag for review
-                if evaluation.approved:
-                    result = await self.email_sender.execute_action(response_text, email_data)
-                    logger.info(f"Email processing completed: {result.action_taken}")
-                    return result
-                else:
-                    logger.warning(f"Response rejected: {evaluation.reason}")
-                    result = EmailActionResult(
-                        action_taken="rejected",
-                        success=False,
-                        error=f"Evaluator rejected: {evaluation.reason}"
-                    )
-                    return result
+                logger.info(f"Email processing completed: {result.action_taken}")
+                return result
                 
             except Exception as e:
                 logger.error(f"Error processing email: {e}")

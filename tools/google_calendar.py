@@ -4,10 +4,13 @@ import logging
 from datetime import datetime, timedelta
 from typing import Dict, Any
 
+from config.logging import setup_logging
 from agents import function_tool
 from config import settings
 from schema import MeetingResult
 
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 

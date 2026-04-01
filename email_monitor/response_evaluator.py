@@ -4,10 +4,13 @@ import json
 import logging
 from typing import Dict, Any
 
+from config.logging import setup_logging
 from agents import Agent, ModelSettings, Runner
 from config import settings
 from schema import ResponseEvaluation
 
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -28,11 +31,7 @@ Evaluate the response for:
 
 Return a simple pass/fail decision with brief reasoning.
 
-Always respond in this exact JSON format:
-{
-  "approved": true/false,
-  "reason": "Brief explanation of decision"
-}
+Respond with JSON only: {"approved": true, "reason": "..."}
 """,
             model_settings=ModelSettings(
                 model=settings.intent_model,  # Reuse same model as intent extraction
@@ -47,34 +46,15 @@ Always respond in this exact JSON format:
         subject = email_context.get('subject', '')
         intent = email_context.get('intent', 'unknown')
         
-        prompt = f"""
-Evaluate this email response for safety and appropriateness:
-
-CONTEXT:
-- Recipient: {sender_email}
-- Subject: {subject} 
-- Intent: {intent}
-
-PROPOSED RESPONSE:
-{response_text}
-
-Is this response professional and appropriate to send?
-"""
-        
+        context = f"Response: {response_text}\nRecipient: {sender_email}\nSubject: {subject}\nIntent: {intent}"        
         try:
-            result = await Runner.run(self.agent, prompt)
-            
-            # Parse JSON output and validate with schema
-            evaluation_data = json.loads(result.final_output)
-            evaluation = ResponseEvaluation(**evaluation_data)
-            
+            result = await Runner.run(self.agent, context)
+            evaluation = ResponseEvaluation(**json.loads(result.final_output))
             logger.info(f"Response evaluation: {'APPROVED' if evaluation.approved else 'REJECTED'} - {evaluation.reason}")
-            
             return evaluation
-            
         except Exception as e:
             logger.error(f"Evaluation failed: {e}")
-            # Default to rejection on evaluation failure for safety
+            return ResponseEvaluation(approved=False, reason="Evaluation failed")
             return ResponseEvaluation(
                 approved=False,
                 reason=f"Evaluation error: {str(e)}"

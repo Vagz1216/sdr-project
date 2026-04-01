@@ -6,7 +6,11 @@ import logging
 import sys
 import uvicorn
 
+from config.logging import setup_logging
 from email_monitor import app
+
+# Setup logging early
+setup_logging()
 
 
 def main():

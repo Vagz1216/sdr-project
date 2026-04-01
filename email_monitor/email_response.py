@@ -1,12 +1,16 @@
 """Email response generation agent."""
 
+import json
 import logging
 from typing import Dict, Any
 
+from config.logging import setup_logging
 from agents import Agent, ModelSettings, Runner
-from schema import EmailIntent, EmailActionResult
+from schema import EmailIntent, EmailResponse
 from config import settings
 
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 
@@ -17,21 +21,20 @@ class EmailResponseAgent:
         self.agent = Agent(
             name="EmailResponseAgent",
             instructions="""
-You are a professional business development assistant crafting email responses.
+You are a professional business development assistant crafting strategic email responses.
 
-Your PRIMARY goal is to schedule meetings/calls with potential clients.
+Analyze the email intent and generate an appropriate response:
+- MEETING_REQUEST: Express enthusiasm and suggest specific times
+- QUESTION: Answer concisely and transition to suggesting a call  
+- INTEREST: Build on their interest and push for meetings
+- OPT_OUT: Respect their request gracefully and confirm removal
+- NEUTRAL: Engage professionally and assess potential
+- BOUNCE/SPAM: Set action to "skipped" with appropriate reason
 
-Response guidelines by intent:
-- meeting_request: Confirm availability and provide scheduling options
-- question: Answer briefly, then suggest meeting for detailed discussion
-- interest: Build value and urgency, push for meeting
-- opt_out: Respect request, confirm removal
-- neutral: Engage professionally, steer toward meeting if appropriate
-- bounce/spam: No response needed
+For valid intents (confidence >= 0.3), generate professional responses (2-3 paragraphs max).
+For low confidence or unwanted intents, set action to "skipped" with reason.
 
-Use email conversation history as context for personalized responses.
-Keep responses concise (2-3 paragraphs max).
-Return ONLY the email response text, no additional formatting or instructions.
+Respond with JSON only: {"response_text": "...", "action": "generated|skipped|error", "reason": null}
 """,
             model_settings=ModelSettings(
                 model=settings.response_model,
@@ -40,56 +43,21 @@ Return ONLY the email response text, no additional formatting or instructions.
             )
         )
     
-    async def generate_response(self, email_data: Dict[str, Any], intent: EmailIntent, conversation_history: str = "") -> Dict[str, Any]:
-        """Generate appropriate response based on intent (returns response text for evaluation)."""
+    async def generate_response(self, email_data: Dict[str, Any], intent: EmailIntent, conversation_history: str = "") -> EmailResponse:
+        """Generate appropriate response based on intent."""
         sender_email = email_data.get('from_', [''])[0]
         subject = email_data.get('subject', '')
         content = email_data.get('text', '') or email_data.get('preview', '')
-        thread_id = email_data.get('thread_id')
         
-        # Skip responses for certain intents
-        if intent.intent in ['bounce', 'spam'] or intent.confidence < 0.3:
-            return {
-                "action": "skipped",
-                "response_text": None,
-                "reason": f"Intent: {intent.intent} (confidence: {intent.confidence})",
-                "email_data": email_data,
-                "intent": intent
-            }
-        
-        # Build context for response generation
-        context = f"""
-Generate a professional email response for this inquiry:
-
-From: {sender_email}
-Subject: {subject}
-Intent: {intent.intent} (confidence: {intent.confidence})
-Content: {content}
-
-Conversation history:
-{conversation_history or "No previous conversation."}
-
-Write a concise, professional response that addresses their {intent.intent} appropriately.
-"""
+        context = f"From: {sender_email}\nSubject: {subject}\nContent: {content}\nINTENT: {intent.intent} (confidence: {intent.confidence})\nHistory: {conversation_history or 'None'}"
         
         try:
             result = await Runner.run(self.agent, context)
-            response_text = result.final_output.strip()
-            
-            return {
-                "action": "generated",
-                "response_text": response_text,
-                "email_data": email_data,
-                "intent": intent,
-                "thread_id": thread_id
-            }
-            
+            return EmailResponse(**json.loads(result.final_output))
         except Exception as e:
             logger.error(f"Failed to generate response: {e}")
-            return {
-                "action": "error",
-                "response_text": None,
-                "reason": str(e),
-                "email_data": email_data,
-                "intent": intent
-            }
+            return EmailResponse(
+                response_text="",
+                action="error",
+                reason=str(e)
+            )

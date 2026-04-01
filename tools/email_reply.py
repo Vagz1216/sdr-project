@@ -4,9 +4,12 @@ from typing import Dict, Any
 import logging
 from agentmail import AgentMail
 
+from config.logging import setup_logging
 from config import settings
 from agents import function_tool
 
+# Setup logging
+setup_logging()
 logger = logging.getLogger(__name__)
 
 

@@ -3,11 +3,21 @@
 import logging
 from typing import Dict, Any
 
+from config.logging import setup_logging
 from agents import Agent, ModelSettings, Runner
-from tools import send_reply_email
-from tools.google_calendar import create_google_meeting
+from tools import (
+    send_reply_email, 
+    create_google_meeting,
+    get_staff_member_email,
+    notify_staff_about_meeting,
+    generate_meeting_details
+)
 from schema import EmailActionResult
 from config import settings
+
+# Setup logging
+setup_logging()
+logger = logging.getLogger(__name__)
 
 logger = logging.getLogger(__name__)
 
@@ -19,26 +29,32 @@ class EmailSenderAgent:
         self.agent = Agent(
             name="EmailSenderAgent",
             instructions="""
-You are a professional email and meeting agent. Based on the approved response and email context, take appropriate actions.
+You are a professional email and meeting coordination agent. Based on the approved response and email context, take appropriate actions.
 
 Your available actions:
 - Send email replies using send_reply_email tool  
+- Generate meeting details using generate_meeting_details tool
+- Get staff member email using get_staff_member_email tool
 - Create Google Calendar meetings using create_google_meeting tool
+- Send meeting notifications to staff using notify_staff_about_meeting tool
 
-Guidelines:
-1. Always send the approved response using send_reply_email tool
-2. If the response mentions scheduling a meeting or call, also use create_google_meeting tool to create the calendar event
-3. For meetings, include all attendees in a list format, suggest reasonable times (business hours, 30-60 minutes duration)
-4. When creating meetings, always include the original sender's email in the attendees list
+IMPORTANT WORKFLOW FOR MEETINGS:
+1. Always send the approved response using send_reply_email tool first
+2. If the response mentions scheduling a meeting, call, or appointment:
+   a) Generate meeting details using generate_meeting_details tool
+   b) Get staff member email using get_staff_member_email tool
+   c) Create meeting with create_google_meeting tool (include client + staff emails)
+   d) Send notification to staff using notify_staff_about_meeting tool
 
-Examples:
-- Simple reply: Just use send_reply_email
-- Reply mentioning "let's schedule a call": Use both send_reply_email AND create_google_meeting
-- Meeting request: Use both tools to reply and schedule
-
-Always execute the appropriate combination of tools based on the approved response content.
+Execute tools in the correct sequence for meeting scenarios.
 """,
-            tools=[send_reply_email, create_google_meeting],
+            tools=[
+                send_reply_email, 
+                generate_meeting_details,
+                create_google_meeting,
+                get_staff_member_email,
+                notify_staff_about_meeting
+            ],
             model_settings=ModelSettings(
                 model=settings.response_model,
                 temperature=0.3,  # Lower temperature for precise execution
@@ -52,7 +68,11 @@ Always execute the appropriate combination of tools based on the approved respon
         thread_id = email_data.get('thread_id')
         subject = email_data.get('subject', '')
         
-        # Build context for the agent
+        # Build context for the agent 
+        intent_data = email_data.get('intent', {})
+        conversation_history = email_data.get('conversation_history', '')
+        email_content = email_data.get('text', '') or email_data.get('preview', '')
+        
         context = f"""
 The following response has been approved and should be sent:
 
@@ -63,12 +83,17 @@ EMAIL CONTEXT:
 - From: {sender_email}
 - Subject: {subject}  
 - Thread ID: {thread_id}
+- Content: {email_content}
+- Client Intent: {intent_data.get('intent', 'unknown')} (confidence: {intent_data.get('confidence', 0.0)})
+- Conversation History: {conversation_history or "No previous conversation."}
 
 INSTRUCTIONS:
 1. Always send the approved response using send_reply_email tool
-2. If the response mentions scheduling a meeting/call, also use schedule_meeting tool
-3. For meetings, suggest reasonable business hours (e.g., "2026-04-15 14:00" for 2 PM)
-4. Use 30-60 minute durations for most meetings
+2. If the response mentions scheduling a meeting/call/appointment:
+   a) Use generate_meeting_details tool with the email context
+   b) Get staff email using get_staff_member_email tool  
+   c) Create meeting with create_google_meeting tool (include client + staff emails)
+   d) Send notification to staff using notify_staff_about_meeting tool
 
 Execute the appropriate combination of tools based on the approved response content.
 """
