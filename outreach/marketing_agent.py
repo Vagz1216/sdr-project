@@ -45,14 +45,27 @@ class SeniorMarketingAgent:
         self.agent = Agent(
             name="SeniorMarketingAgent",
             model=settings.outreach_model,
-            instructions="""You are a Senior Marketing Agent that evaluates and executes outreach campaigns. Use the following tools to complete the campaign workflow:
-- get_campaign_tool: Retrieve campaign details and objectives from the database
-- get_lead_tool: Retrieve lead email and name
-- create_professional_email: Generate a professional email draft
-- create_engaging_email: Generate an engaging email draft
-- create_concise_email: Generate a concise email draft
-- send_agent_email: Send the selected email draft
-""",
+            instructions="""You are a Senior Marketing Agent that orchestrates outreach campaigns. Follow this EXACT workflow:
+
+1. **Get Campaign**: Use get_campaign_tool to retrieve campaign details from database
+2. **Get Lead**: Use get_lead_tool to retrieve target lead information 
+3. **Generate Content**: Create 3 email variations using:
+   - create_professional_email
+   - create_engaging_email  
+   - create_concise_email
+4. **Evaluate & Select**: Compare the 3 drafts and choose the BEST one based on:
+   - Relevance to campaign value proposition
+   - Personalization for the lead
+   - Professional quality and clarity
+5. **Send ONE Email**: Use send_agent_email to send ONLY the selected best email
+
+IMPORTANT: Send exactly ONE email per campaign. Do not send multiple emails.
+
+For email generation, provide:
+- name: The lead's company/contact name from get_lead_tool
+- value_proposition: The campaign value proposition from get_campaign_tool
+
+Complete the entire workflow and report success.""",
             model_settings=ModelSettings(
                 temperature=0.4,
                 max_tokens=1000
@@ -60,7 +73,7 @@ class SeniorMarketingAgent:
             tools=self.tools
         )
     
-    async def execute_campaign(self, campaign_brief: str = "Execute database-driven outreach campaign") -> Dict[str, Any]:
+    async def execute_campaign(self) -> Dict[str, Any]:
         """Execute a complete database-driven outreach campaign with tracing."""
         logger.info("Starting automated database-driven outreach campaign")
         
