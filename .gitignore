@@ -57,3 +57,5 @@ htmlcov/
 
 # mypy
 .mypy_cache/
+
+.sixth
