@@ -21,7 +21,7 @@ def get_leads(email_cap: int = 5) -> Dict[str, Any]:
     conn = get_conn()
     cur = conn.execute(
         """
-        SELECT l.* FROM leads l
+        SELECT l.name, l.email FROM leads l
         JOIN campaign_leads cl ON cl.lead_id = l.id
         JOIN campaigns c ON c.id = cl.campaign_id
         WHERE l.email_opt_out = 0
@@ -32,8 +32,19 @@ def get_leads(email_cap: int = 5) -> Dict[str, Any]:
         (email_cap,)
     )
     rows = cur.fetchall()
+    # Only expose name and email to callers
     leads = [dict_from_row(r) for r in rows]
-    return {"success": True, "data": leads, "error": None}
+    # Ensure keys are normalized to lowercase 'name' and 'email'
+    filtered = []
+    for l in leads:
+        # dict_from_row may return None in some edge cases; guard against it
+        if not l or not isinstance(l, dict):
+            continue
+        filtered.append({
+            "name": l.get("name"),
+            "email": l.get("email"),
+        })
+    return {"success": True, "data": filtered, "error": None}
 
 
 def update_lead_touch(lead_id: int, campaign_id: int) -> Dict[str, Any]:
