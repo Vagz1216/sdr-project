@@ -7,6 +7,7 @@ INSERT OR IGNORE INTO campaigns (id, name, value_proposition, cta, status) VALUE
 
 -- Sample leads
 INSERT OR IGNORE INTO leads (id, email, name, status, email_opt_out, touch_count) VALUES
+
   (1, 'lawstands@gmail.com', 'Lawstands', 'NEW', 0, 0),
   (2, 'konnect1795@gmail.com', 'Konnect1795', 'NEW', 0, 0),
   (3, 'martinkam1216@gmail.com', 'Martinkam1216', 'NEW', 0, 0),
