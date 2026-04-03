@@ -44,7 +44,7 @@ class AccessLogMiddleware(BaseHTTPMiddleware):
         return response
 
 app = FastAPI(
-    title="Squad3 API", 
+    title="Andela AI Bootcamp Euclid Squad 3 API", 
     description="Outreach and Email Monitoring System",
     version="1.0.0"
 )
@@ -57,14 +57,14 @@ app.add_middleware(AccessLogMiddleware)
 @app.get("/health")
 def health() -> Dict[str, str]:
     """Global health check."""
-    return {"status": "ok", "service": "squad3_api"}
+    return {"status": "ok", "service": "Andela AI Bootcamp Euclid Squad 3 API"}
 
 
 @app.get("/")
 async def root() -> Dict[str, Any]:
     """Root endpoint with API overview."""
     return {
-        "service": "Squad3 API",
+        "service": "Andela AI Bootcamp Euclid Squad 3 API",
         "version": "1.0.0",
         "endpoints": {
             "marketing_campaign": "/outreach/campaign",
